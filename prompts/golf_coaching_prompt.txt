@@ -1,0 +1,117 @@
+CONVERSATION_PROMPT = """
+
+Generate a realistic conversation between a golf coach and an athlete/golfer for a comprehensive golf performance assessment.
+
+Always start with the coach greeting the athlete and asking about their golf background or current game.
+
+Make the conversation as realistic as possible - with the coach asking assessment questions based on the golf coaching template, the athlete responding naturally, and follow-up questions for clarification.
+
+The conversation should be at least fifteen lines long and cover multiple assessment areas.
+
+The coach should ask questions that align with the golf assessment template sections:
+- Player background and experience
+- Technical skills assessment  
+- Mental game and course management
+- Physical fitness and conditioning
+- Goals and motivation
+
+Keep the conversation professional but friendly, like a real coaching session.
+
+## important:
+
+Format the entire response as a json object, with the following format:
+
+{
+  "conversation": [
+    {"coach": "Hello! Welcome to our coaching session. Tell me a bit about your golf background."},
+    {"athlete": "Hi coach! I have been playing golf for about five years now."},
+    {"coach": "That is great! What is your current handicap?"},
+    {"athlete": "I am sitting around a twelve handicap right now."},
+    {"coach": "Good to know. What club do you feel most confident with?"},
+    {"athlete": "Definitely my seven iron. I can always rely on it for consistent shots."},
+    {"coach": "Excellent. What part of your game do you think needs the most work?"},
+    {"athlete": "My putting is really inconsistent. I struggle on the greens especially under pressure."},
+    {"coach": "I understand. How do you typically handle pressure situations on the course?"},
+    {"athlete": "Not very well to be honest. I get nervous and tend to overthink my shots."},
+    {"coach": "That is common. Do you have a regular fitness routine?"},
+    {"athlete": "Not really. I know I should work on my flexibility and core strength."},
+    {"coach": "What is your main goal for improving your golf game?"},
+    {"athlete": "I would love to get down to single digits and maybe play in some local tournaments."},
+    {"coach": "That is a great goal! How much time can you dedicate to practice each week?"},
+    {"athlete": "I can probably manage about four to five hours per week between range time and playing."}
+  ],
+  "assessment": {
+    "years_playing": 5,
+    "current_handicap": "12",
+    "strongest_club": "7-iron",
+    "weakest_area": "putting",
+    "pressure_handling": "struggles with nerves and overthinking",
+    "fitness_routine": false,
+    "primary_goal": "reach single digit handicap and play tournaments",
+    "practice_time": "4-5 hours per week"
+  }
+}
+
+## very very important:
+
+The last item in the json object must be the assessment, which maps the athlete responses to the golf assessment template fields.
+
+## important:
+
+The assessment section should include as many relevant fields as possible from the golf assessment template:
+- years_playing (integer)
+- current_handicap (string)
+- rounds_per_month (integer)
+- home_course (string)
+- previous_instruction (boolean)
+- strongest_club (string)
+- weakest_area (string)
+- driving_accuracy (enum: Excellent, Good, Average, Below Average, Poor)
+- short_game_confidence (enum: Very Confident, Confident, Somewhat Confident, Not Confident)
+- putting_consistency (enum: Very Consistent, Consistent, Inconsistent, Very Inconsistent)
+- pre_shot_routine (boolean)
+- pressure_handling (string)
+- course_strategy (enum: Very Aggressive, Aggressive, Balanced, Conservative, Very Conservative)
+- mental_toughness (string)
+- flexibility (enum: Excellent, Good, Average, Below Average, Poor)
+- fitness_routine (boolean)
+- injuries_limitations (string)
+- stamina_endurance (enum: Strong Throughout, Good, Fades Late, Gets Tired, Poor Endurance)
+- primary_goal (string)
+- target_handicap (string)
+- motivation_level (enum: Extremely Motivated, Very Motivated, Motivated, Somewhat Motivated, Not Very Motivated)
+- practice_time (string)
+- competitive_interest (boolean)
+
+## important:
+
+Return only the json object. Do not print anything else.
+
+## important:
+
+Make the conversation natural - the coach should not ask every single assessment question in a robotic way. Pick eight to twelve key questions that flow naturally in conversation.
+
+## important:
+
+In your response, do not include special characters such as & or <.
+
+## very important:
+
+If you have numbers such as eight, nine in your response, spell them out as eight, nine, etc.
+
+## very important:
+
+Do not abbreviate words such as "you are" or "I will". Write them out in full.
+
+## important:
+
+Make the athlete responses realistic - some confident, some uncertain, some detailed, some brief. Include specific golf terminology and realistic scenarios.
+
+## important:
+
+The coach should ask follow-up questions based on athlete responses to get more detail for the assessment.
+
+## very important:
+
+Vary the skill levels - sometimes generate conversations for beginners, sometimes intermediate, sometimes advanced players. Adjust the handicap, experience, and responses accordingly.
+"""

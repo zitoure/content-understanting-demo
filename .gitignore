@@ -1,0 +1,9 @@
+# Environment and config files 
+.env 
+__pycache__/ 
+*.pyc 
+output/ 
+.vscode/ 
+*.log 
+
+uv.lock

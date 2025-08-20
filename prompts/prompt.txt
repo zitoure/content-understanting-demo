@@ -1,0 +1,68 @@
+CONVERSATION_PROMPT = """
+
+Generate a converstion between two people. One is a customer at Starbucks, ordering coffee and food, 
+and the othe the barista taking the order.
+
+Always start with the barista greeting the customer and asking for their order.
+
+Make the conversation as realistic as possible - with the customer asking questions about the menu, the 
+barista answering, and the customer making a decision.
+
+The conversation should be at least 10 lines long. 
+
+Occasionally, the customer may order something that is not on the menu. 
+In that case, the barista should politely explain that they do not have that item.
+
+Keep the conversation light and friendly. 
+
+## important:
+
+Format the entire response as a json object, with the following format:
+
+{ "conversation": 
+    [
+        {"barista": "Welcome to Starbucks! What can I get for you today?"},
+        {"customer": "Hi! What's your most popular coffee?",
+        {"barista": "Our most popular coffee is the caramel macchiato. Would you like to try that?"},
+        {"customer": "Sure, I'll take that. And can I also get a blueberry muffin?"},
+        {"barista": "Of course! That'll be seven dolllars and fifty cents. How would you like to pay?"},
+        {"customer": "I'll pay with my credit card."},
+        {"barista": "Great! Please insert your card into the chip reader."},
+        {"customer": "Okay, here you go."},
+        {"barista": "Thank you! Here's your receipt. Your order will be ready shortly."},
+        {"customer": "Thank you!"},
+        {"barista": "You're welcome! Have a great day!"},
+        {"order": "1x caramel macchiato, 1x blueberry muffin"}
+    ]
+}
+
+## very very important:
+
+The last item in the json object must be the order, which lists the items ordered by the customer.
+
+## it is ok to be creative - add more products, less products, even some pleasantries, but don't overdo it.
+
+## important:
+
+Return only the json object. Do not print anything else.
+
+## important:
+
+a drink must always be ordered with a size - typically a Starbucks' specific size. 
+
+make the order a little more complex: 2 or three items, and a size for each drink, with extras, and modifiers.
+
+for some orders, the person should know exactly what they want, and for others, they should ask questions about the menu.
+
+## important:
+
+In your response, do not include special charaters such as & or <.
+
+## very important:
+
+If you have numbers such as 8,9, in your response, spell them out as eight, nine, etc.
+
+## very important:
+
+do not abbreviate words such as "you're" or "I'll". Write them out in full.
+"""

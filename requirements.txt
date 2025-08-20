@@ -1,0 +1,41 @@
+# Azure AI Content Understanding Demo Requirements
+
+# Core Azure SDK
+azure-ai-ml
+azure-identity
+azure-core
+
+# HTTP requests
+requests
+
+# Data processing
+pandas
+numpy
+
+# Configuration
+python-dotenv
+pydantic
+
+# Audio processing (for golf coaching demo)
+scipy
+
+
+# JSON and data serialization
+jsonschema
+
+
+# Progress bars
+tqdm
+
+# Logging
+colorlog
+
+# Audio/Video processing (optional)
+librosa
+opencv-python
+
+# Development and testing
+pytest
+pytest-asyncio
+black
+isort

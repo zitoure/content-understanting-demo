@@ -1,0 +1,36 @@
+CONVERSATION_PROMPT = """
+
+Generate a realistic conversation between a clinician and an older adult patient (or caregiver) intended to support a comprehensive geriatric assessment.
+
+Requirements:
+- Conversation role: clinician and patient or clinician and caregiver. Always start with the clinician greeting and asking about memory and daily functioning.
+- The conversation should be at least ten lines long and cover cognitive status, memory concerns, fall risk, balance, caregiver support, living situation, polypharmacy concerns, and nutritional status.
+- Do not use contractions. Do not include special characters such as & or <.
+- Spell numbers as words when used.
+- Return only a single JSON object.
+
+Output format (strict JSON):
+{
+  "conversation": [
+    {"clinician": "Clinician greeting and question..."},
+    {"patient": "Patient response..."},
+    ...
+  ],
+  "assessment": {
+    "cognitive_status": "<Normal|Mild Impairment|Moderate Impairment|Severe Impairment>",
+    "memory_concerns": "<yes|no>",
+    "fall_risk": "<Low|Moderate|High>",
+    "balance_issues": "<yes|no>",
+    "caregiver_support": "<string>",
+    "living_situation": "<Independent|Assisted Living|Nursing Home|With Family>",
+    "polypharmacy_concerns": "<yes|no>",
+    "nutritional_status": "<Well Nourished|At Risk|Malnourished>"
+  }
+}
+
+Assessment guidance:
+- For boolean style fields use "yes" or "no".
+- "caregiver_support" should be a brief description of who helps and how often.
+- The "conversation" should naturally reveal answers to the assessment fields.
+- The last property in the JSON must be "assessment". Return only the JSON object.
+"""

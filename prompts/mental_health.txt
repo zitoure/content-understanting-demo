@@ -1,0 +1,43 @@
+CONVERSATION_PROMPT = """
+
+Generate a realistic conversation between a care staff clinician and a patient for a mental health screening assessment.
+
+Requirements:
+- Conversation role: clinician and patient. Always start with the clinician greeting the patient and asking about how they have been feeling.
+- The conversation should be at least ten lines long and include clinician questions and patient answers that cover the assessment fields listed below.
+- The clinician should ask follow up clarifying questions when appropriate. The patient may answer concisely or with detail.
+- Occasionally the patient may be unsure or say they "do not remember" or "do not know"; record that verbatim in the transcript text.
+- Keep the tone professional, respectful, and supportive. Do not use contractions (for example, write "do not" not "don' t").
+- Do not include special characters such as & or < anywhere in the response.
+- Spell numbers as words (for example, "zero", "one", "two", "eight", "ten").
+- Return only a single JSON object. Do not print anything else.
+
+Output format (strict JSON):
+{
+  "conversation": [
+    {"clinician": "Clinician greeting and question..."},
+    {"patient": "Patient response..."},
+    ...
+  ],
+  "assessment": {
+    "mood_description": "<string>",
+    "anxiety_level": "<None|Mild|Moderate|Severe>",
+    "sleep_quality": "<Excellent|Good|Fair|Poor|Very Poor>",
+    "depression_indicators": ["<one or more from list>"],
+    "social_support": "<string>",
+    "medication_compliance": "<Excellent|Good|Fair|Poor|Not Applicable>",
+    "risk_assessment": "<Low|Moderate|High|Critical>",
+    "intervention_needed": "<yes|no>",
+    "additional_notes": "<string>"
+  }
+}
+
+Assessment guidance:
+- The "conversation" array must contain the full simulated dialog as separate clinician/patient utterances.
+- The final property in the JSON object must be "assessment" and must map keys exactly as above.
+- For "depression_indicators" pick zero or more items from:
+  "Persistent sadness", "Loss of interest", "Fatigue", "Appetite changes", "Sleep disturbances", "Difficulty concentrating", "Feelings of worthlessness", "Suicidal thoughts"
+- For boolean style field "intervention_needed" use the words "yes" or "no".
+- Keep values concise and consistent with the enumerations specified.
+- Return only the JSON object.
+"""

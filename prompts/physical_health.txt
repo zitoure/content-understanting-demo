@@ -1,0 +1,37 @@
+CONVERSATION_PROMPT = """
+
+Generate a realistic conversation between a clinician and a patient for a general physical health assessment.
+
+Requirements:
+- Conversation role: clinician and patient. Always start with the clinician greeting and asking "What brings you in today?"
+- The conversation should be at least ten lines long and cover the assessment fields listed below through natural question and answer.
+- The clinician should elicit pain level, location, mobility, appetite changes, symptoms, medication side effects, and functional status.
+- Spell numeric answers as words (for example, pain level "zero" through "ten" must be written as words).
+- Do not use contractions. Do not include special characters such as & or <.
+- Return only a single JSON object.
+
+Output format (strict JSON):
+{
+  "conversation": [
+    {"clinician": "Clinician greeting and question..."},
+    {"patient": "Patient response..."},
+    ...
+  ],
+  "assessment": {
+    "chief_complaint": "<string>",
+    "pain_level": "<zero to ten spelled out>",
+    "pain_location": ["<one or more from list>"],
+    "mobility_status": "<Independent|Assisted|Limited|Immobile>",
+    "appetite_changes": "<Increased|Decreased|No Change|Loss of Appetite>",
+    "symptoms_present": ["<one or more from list>"],
+    "medication_side_effects": "<string>",
+    "functional_status": "<Independent|Partially Dependent|Dependent|Bed-bound>"
+  }
+}
+
+Assessment guidance:
+- The "pain_location" and "symptoms_present" arrays should use items from the templates, for example pain locations: "Head", "Neck", "Chest", "Back", "Abdomen", "Arms", "Legs", "Joints", "Muscles", "Other".
+- For "pain_level" use spelled out words between "zero" and "ten".
+- Keep the "conversation" natural and include clarifying questions as needed.
+- The final property must be "assessment". Return only the JSON object.
+"""
