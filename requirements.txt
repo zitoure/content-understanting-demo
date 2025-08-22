@@ -12,6 +12,10 @@ requests
 pandas
 numpy
 
+# Evaluation and ML libraries
+scikit-learn
+openai>=1.0.0
+
 # Configuration
 python-dotenv
 pydantic
