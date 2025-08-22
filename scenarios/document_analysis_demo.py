@@ -8,9 +8,14 @@ It supports various document formats including PDF, images, and Office documents
 import os
 import json
 import logging
+import argparse
 from pathlib import Path
 from typing import Dict, Optional, Any
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
 
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env
 
@@ -89,7 +94,12 @@ class DocumentAnalyzer:
         Returns:
             Analyzer creation result
         """
-        # Default custom fields for invoice processing
+        # Default custom fields for receipt processing
+        existing_analyzer_ids = self.client.list_analyzer_ids()
+        if analyzer_id in existing_analyzer_ids:
+            logger.warning(f"Analyzer with ID '{analyzer_id}' already exists. Reusing it")
+            return {"status": "exists", "analyzer_id": analyzer_id}
+
         if custom_fields is None:
             custom_fields = {
                 "VendorName": {
@@ -257,81 +267,126 @@ class DocumentAnalyzer:
         return extracted_info
 
 
-def main():
+def main(document_type="invoice"):
     """Main demo function for document analysis."""
     # Load environment variables
     load_dotenv()
+    
+    # Sample document URLs
+    sample_documents = {
+        "invoice": "https://github.com/Azure-Samples/azure-ai-content-understanding-python/raw/refs/heads/main/data/invoice.pdf",
+        "receipt": "https://github.com/Azure-Samples/azure-ai-content-understanding-python/raw/refs/heads/main/data/receipt.png"
+    }
+    
+    # Determine which document to analyze
+    document_url = sample_documents[document_type]
+    document_name = document_type
+    print(f"📋 Analyzing sample {document_name}: {document_url}")
     
     # Create client
     try:
         client = create_client_from_env()
         analyzer = DocumentAnalyzer(client)
         
-        print("=== Azure AI Content Understanding - Document Analysis Demo ===\n")
-        
-        # Sample document URLs (you can replace these with your own)
-        sample_documents = {
-            "invoice": "https://github.com/Azure-Samples/azure-ai-content-understanding-python/raw/refs/heads/main/data/invoice.pdf",
-            "receipt": "https://github.com/Azure-Samples/azure-ai-content-understanding-python/raw/refs/heads/main/data/receipt.png"
-        }
+        print("\n=== Azure AI Content Understanding - Document Analysis Demo ===\n")
         
         # Demo 1: Analyze with prebuilt analyzer
         print("1. Analyzing document with prebuilt analyzer...")
         try:
             result = analyzer.analyze_with_prebuilt_analyzer(
-                document_url=sample_documents["invoice"],
-                output_file="prebuilt_analysis_result.json"
+                document_url=document_url,
+                output_file=f"prebuilt_{document_name}_analysis.json"
             )
             
             # Extract and display key information
             key_info = analyzer.extract_key_information(result)
             print(f"   Status: {key_info['status']}")
             print(f"   Analyzer: {key_info['analyzer_id']}")
-            print(f"   Content preview: {key_info['content_summary']['markdown'][:200]}...")
-            print(f"   Structure: {key_info['content_summary']['structure']}")
+            
+            if key_info['content_summary']['markdown']:
+                content_preview = key_info['content_summary']['markdown'][:200]
+                print(f"   Content preview: {content_preview}...")
+            
+            if key_info['content_summary']['structure']:
+                print(f"   Structure: {key_info['content_summary']['structure']}")
+            
             print("   ✓ Prebuilt analysis completed successfully\n")
             
         except Exception as e:
             print(f"   ✗ Prebuilt analysis failed: {e}\n")
+            logger.error("Prebuilt analysis failed", exc_info=True)
         
-        # Demo 2: Create and use custom analyzer
+        # Demo 2: Create and use custom analyzer (if requested)
         print("2. Creating custom document analyzer...")
-        custom_analyzer_id = "demo-invoice-analyzer"
+        custom_analyzer_id = f"demo-{document_name}-analyzer"
         
         try:
             # Create custom analyzer
             creation_result = analyzer.create_custom_document_analyzer(
                 analyzer_id=custom_analyzer_id,
-                description="Demo invoice analyzer with custom fields"
+                description=f"Demo {document_name} analyzer with custom fields"
             )
-            print(f"   ✓ Custom analyzer '{custom_analyzer_id}' created successfully\n")
+            
+            if creation_result.get("status") == "exists":
+                print(f"   ✓ Custom analyzer '{custom_analyzer_id}' already exists, reusing it")
+            else:
+                print(f"   ✓ Custom analyzer '{custom_analyzer_id}' created successfully")
             
             # Analyze with custom analyzer
             print("3. Analyzing document with custom analyzer...")
             custom_result = analyzer.analyze_with_custom_analyzer(
                 analyzer_id=custom_analyzer_id,
-                document_url=sample_documents["invoice"],
-                output_file="custom_analysis_result.json"
+                document_url=document_url,
+                output_file=f"custom_{document_name}_analysis.json"
             )
             
             # Extract and display custom field results
             key_info = analyzer.extract_key_information(custom_result)
             print(f"   Status: {key_info['status']}")
-            print("   Extracted custom fields:")
-            for field_name, field_value in key_info['extracted_fields'].items():
-                print(f"     {field_name}: {field_value}")
+            
+            if key_info['extracted_fields']:
+                print("   Extracted custom fields:")
+                for field_name, field_value in key_info['extracted_fields'].items():
+                    if isinstance(field_value, list):
+                        field_display = f"{len(field_value)} items" if field_value else "empty"
+                    else:
+                        field_display = str(field_value)[:50] + ("..." if len(str(field_value)) > 50 else "")
+                    print(f"     {field_name}: {field_display}")
+            else:
+                print("   No custom fields extracted")
+            
             print("   ✓ Custom analysis completed successfully\n")
             
         except Exception as e:
             print(f"   ✗ Custom analyzer demo failed: {e}\n")
+            logger.error("Custom analyzer demo failed", exc_info=True)
         
         print("=== Document Analysis Demo Completed ===")
-        print(f"Results saved to: {analyzer.output_dir}")
+        print(f"📁 Results saved to: {analyzer.output_dir}")
+        
+        # List output files
+        output_files = list(analyzer.output_dir.glob(f"*{document_name}*.json"))
+        if output_files:
+            print("📄 Generated files:")
+            for file_path in output_files:
+                print(f"   • {file_path.name}")
         
     except Exception as e:
-        print(f"Demo failed: {e}")
+        print(f"❌ Demo failed: {e}")
         print("Please check your configuration in .env file")
+        logger.error("Demo failed", exc_info=True)
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Simple argument handling: python script.py [invoice|receipt]
+    document_type = "invoice"  # default
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ["invoice", "receipt"]:
+            document_type = sys.argv[1]
+        else:
+            print("Usage: python document_analysis_demo.py [invoice|receipt]")
+            sys.exit(1)
+    
+    main(document_type)

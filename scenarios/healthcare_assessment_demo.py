@@ -8,7 +8,7 @@ Features:
 - Audio transcription and analysis of patient conversations
 - Automatic extraction of assessment data
 - Support for multiple question types (open-ended, single choice, multiple choice)
-- Confidence scoring for extracted information
+- Extraction scoring for extracted information
 - HIPAA-compliant data handling practices
 """
 
@@ -22,8 +22,11 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
+
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env
-from utils import extract_transcript_text
+from utils.utils import extract_transcript_text
 
 # Set up logging
 logging.basicConfig(
@@ -262,7 +265,6 @@ class PatientAssessmentAnalyzer:
         self,
         assessment_type: str,
         analyzer_id: Optional[str] = None,
-        reuse_existing: bool = True,
         force_overwrite: bool = False
     ) -> str:
         """
@@ -271,54 +273,50 @@ class PatientAssessmentAnalyzer:
         Args:
             assessment_type: Type of assessment (mental_health_screening, physical_health_assessment, etc.)
             analyzer_id: Optional custom analyzer ID
-            reuse_existing: If True, reuse existing analyzer with same name
             force_overwrite: If True, delete and recreate existing analyzer
             
         Returns:
             Analyzer ID (existing or newly created)
         """
-        if assessment_type not in self.assessment_templates:
-            raise ValueError(f"Unknown assessment type: {assessment_type}")
-        
-        template = self.assessment_templates[assessment_type]
-        
-        if analyzer_id is None:
-            base_analyzer_id = f"healthcare-{assessment_type.replace('_', '-')}-analyzer"
-        else:
-            base_analyzer_id = analyzer_id
-        
-        # Check if analyzer already exists
-        existing_analyzer = None
-        if reuse_existing or force_overwrite:
+        try:
+            if assessment_type not in self.assessment_templates:
+                raise ValueError(f"Unknown assessment type: {assessment_type}")
+            
+            template = self.assessment_templates[assessment_type]
+            
+            if analyzer_id is None:
+                analyzer_id = f"healthcare-{assessment_type.replace('_', '-')}-analyzer"
+            
+            # Check if analyzer already exists
+            logger.info("Getting list of existing analyzers...")
             try:
-                existing_analyzers = self.client.list_analyzers()
-                for analyzer in existing_analyzers:
-                    if analyzer.get("name") == base_analyzer_id:
-                        existing_analyzer = analyzer
-                        break
-            except Exception as e:
-                logger.warning(f"Could not check existing analyzers: {e}")
-        
-        # Handle existing analyzer
-        if existing_analyzer:
-            if force_overwrite:
-                logger.info(f"Force overwrite enabled - deleting existing analyzer: {base_analyzer_id}")
+                existing_analyzer_ids = self.client.list_analyzer_ids()
+                logger.info(f"Raw existing_analyzers response: {existing_analyzer_ids}")
+                
+                if analyzer_id in existing_analyzer_ids:
+                    if not force_overwrite:
+                        logger.info(f"Reusing existing analyzer: {analyzer_id}")
+                        return analyzer_id
+                    else:
+                        logger.info(f"Deleting existing analyzer for recreation: {analyzer_id}")
+                        self.client.delete_analyzer(analyzer_id)
+                        
+            except Exception as list_error:
+                logger.error(f"Error listing analyzers: {list_error}")
+                # Try to delete anyway in case it exists
                 try:
-                    self.client.delete_analyzer(base_analyzer_id)
-                    logger.info(f"Successfully deleted analyzer: {base_analyzer_id}")
-                except Exception as e:
-                    logger.warning(f"Could not delete existing analyzer: {e}")
-            elif reuse_existing:
-                logger.info(f"Reusing existing analyzer: {base_analyzer_id}")
-                return base_analyzer_id
-        
-        # Generate unique analyzer ID if not reusing or overwriting
-        if not reuse_existing and not force_overwrite and existing_analyzer:
-            import time
-            timestamp = int(time.time())
-            analyzer_id = f"{base_analyzer_id}-{timestamp}"
-        else:
-            analyzer_id = base_analyzer_id
+                    logger.info(f"Attempting to delete analyzer {analyzer_id} due to list error...")
+                    self.client.delete_analyzer(analyzer_id)
+                    logger.info(f"Successfully deleted analyzer: {analyzer_id}")
+                except Exception as delete_error:
+                    logger.info(f"Could not delete analyzer {analyzer_id}: {delete_error}")
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in create_assessment_analyzer: {traceback.format_exc()}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            raise
         
         analyzer_config = {
             "description": f"Healthcare analyzer for {template['name']}",
@@ -333,44 +331,13 @@ class PatientAssessmentAnalyzer:
             }
         }
         
-        logger.info(f"Creating healthcare assessment analyzer: {analyzer_id}")
-        try:
-            creation_result = self.client.create_analyzer(analyzer_id, analyzer_config)
-        except Exception as e:
-            if "ModelExists" in str(e) or "already exists" in str(e).lower():
-                # If analyzer still exists after our checks, try with timestamp
-                logger.warning(f"Analyzer {analyzer_id} already exists, creating with timestamp")
-                import time
-                timestamp = int(time.time())
-                analyzer_id = f"{base_analyzer_id}-{timestamp}"
-                logger.info(f"Retrying with analyzer ID: {analyzer_id}")
-                creation_result = self.client.create_analyzer(analyzer_id, analyzer_config)
-            else:
-                raise
+        logger.info(f"Creating analyzer: {analyzer_id}")
+        result = self.client.create_analyzer(
+            analyzer_id=analyzer_id,
+            analyzer_config=analyzer_config
+        )
         
-        # Wait for analyzer creation
-        if creation_result.get("operation_location"):
-            logger.info("Waiting for analyzer creation to complete...")
-            operation_url = creation_result["operation_location"]
-            
-            import time
-            max_wait = 120
-            start_time = time.time()
-            
-            while time.time() - start_time < max_wait:
-                status_result = self.client.get_analyzer_operation_status(operation_url)
-                status = status_result.get("status", "Unknown")
-                
-                if status.lower() == "succeeded":
-                    logger.info(f"Healthcare analyzer {analyzer_id} created successfully")
-                    break
-                elif status.lower() in ["failed", "cancelled"]:
-                    raise Exception(f"Analyzer creation failed: {status}")
-                
-                time.sleep(5)
-            else:
-                raise Exception("Analyzer creation timed out")
-        
+        logger.info(f"Analyzer created successfully: {analyzer_id}")
         return analyzer_id
     
     def analyze_patient_conversation(
@@ -381,7 +348,6 @@ class PatientAssessmentAnalyzer:
         care_staff_id: Optional[str] = None,
         session_metadata: Optional[Dict[str, Any]] = None,
         analyzer_id: Optional[str] = None,
-        reuse_existing: bool = True,
         force_overwrite: bool = False
     ) -> Dict[str, Any]:
         """
@@ -394,7 +360,6 @@ class PatientAssessmentAnalyzer:
             care_staff_id: Optional care staff identifier  
             session_metadata: Optional session metadata
             analyzer_id: Optional custom analyzer ID
-            reuse_existing: If True, reuse existing analyzer with same name
             force_overwrite: If True, delete and recreate existing analyzer
             
         Returns:
@@ -404,26 +369,36 @@ class PatientAssessmentAnalyzer:
         analyzer_id = self.create_assessment_analyzer(
             assessment_type,
             analyzer_id=analyzer_id,
-            reuse_existing=reuse_existing,
             force_overwrite=force_overwrite
         )
         
         # Analyze the conversation
         logger.info(f"Starting analysis of patient conversation for {assessment_type}")
-        analysis_request = self.client.analyze_content(
-            analyzer_id=analyzer_id,
-            content_url=audio_url
-        )
-        
-        request_id = analysis_request["request_id"]
-        logger.info(f"Analysis started with request ID: {request_id}")
-        
-        # Wait for completion (healthcare analysis may take longer for accuracy)
-        result = self.client.wait_for_analysis_completion(
-            request_id,
-            max_wait_time=600,  # 10 minutes
-            poll_interval=10
-        )
+        try:
+            analysis_request = self.client.analyze_content(
+                analyzer_id=analyzer_id,
+                content_url=audio_url
+            )
+            
+            request_id = analysis_request["request_id"]
+            if not request_id:
+                raise ValueError(f"No request ID found in response: {analysis_request}")
+
+            logger.info(f"Analysis started with request ID: {request_id}")
+            
+            # Wait for completion (healthcare analysis may take longer for accuracy)
+            result = self.client.wait_for_analysis_completion(
+                request_id,
+                max_wait_time=600,  # 10 minutes
+                poll_interval=10
+            )
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"Detailed error: {traceback.format_exc()}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            raise
         
         # Process results into assessment format
         assessment_result = self._process_assessment_results(
@@ -453,7 +428,7 @@ class PatientAssessmentAnalyzer:
         # Extract analysis results
         contents = raw_result.get("result", {}).get("contents", [])
         extracted_fields = {}
-        confidence_scores = {}
+        extraction_status = {}
         
         if contents:
             content = contents[0]
@@ -461,18 +436,38 @@ class PatientAssessmentAnalyzer:
             
             for field_name, field_data in fields.items():
                 field_type = field_data.get("type")
-                confidence = field_data.get("confidence", 0.0)
+                extracted_value = None
                 
                 if field_type == "string":
-                    extracted_fields[field_name] = field_data.get("valueString")
+                    extracted_value = field_data.get("valueString")
                 elif field_type == "array":
-                    extracted_fields[field_name] = field_data.get("valueArray", [])
+                    # Handle array of values (each item might be a complex object)
+                    array_values = field_data.get("valueArray", [])
+                    extracted_values = []
+                    for item in array_values:
+                        if isinstance(item, dict) and item.get("type") == "string":
+                            extracted_values.append(item.get("valueString", ""))
+                        elif isinstance(item, str):
+                            extracted_values.append(item)
+                        else:
+                            extracted_values.append(str(item))
+                    extracted_value = extracted_values
                 elif field_type == "boolean":
-                    extracted_fields[field_name] = field_data.get("valueBoolean")
+                    extracted_value = field_data.get("valueBoolean")
                 elif field_type == "integer":
-                    extracted_fields[field_name] = field_data.get("valueInteger")
+                    extracted_value = field_data.get("valueInteger")
+                elif field_type == "number":
+                    extracted_value = field_data.get("valueNumber")
                 
-                confidence_scores[field_name] = confidence
+                # Store the extracted value
+                extracted_fields[field_name] = extracted_value
+                
+                # Set extraction status based on whether we extracted a value
+                # 1.0 if extracted, 0.0 if missing/empty
+                if extracted_value is not None and extracted_value != "" and extracted_value != []:
+                    extraction_status[field_name] = 1.0
+                else:
+                    extraction_status[field_name] = 0.0
         
         # Create comprehensive assessment result
         assessment_result = {
@@ -491,9 +486,9 @@ class PatientAssessmentAnalyzer:
                 "speaker_info": self._extract_speaker_info(contents[0] if contents else {})
             },
             "assessment_responses": {},
-            "confidence_scores": confidence_scores,
-            "quality_indicators": self._calculate_quality_indicators(confidence_scores),
-            "recommendations": self._generate_recommendations(extracted_fields, confidence_scores, assessment_type),
+            "extraction_status": extraction_status,
+            "quality_indicators": self._calculate_quality_indicators(extraction_status),
+            "recommendations": self._generate_recommendations(extracted_fields, extraction_status, assessment_type),
             "raw_analysis_result": raw_result
         }
         
@@ -502,14 +497,14 @@ class PatientAssessmentAnalyzer:
             question_type = field_config["question_type"]
             question_text = field_config["question"]
             extracted_value = extracted_fields.get(field_name)
-            confidence = confidence_scores.get(field_name, 0.0)
+            field_extracted = extraction_status.get(field_name, 0.0)
             
             assessment_response = {
                 "question": question_text,
                 "question_type": question_type,
                 "extracted_value": extracted_value,
-                "confidence": confidence,
-                "requires_review": confidence < 0.7,  # Flag low confidence responses
+                "field_extracted": field_extracted,
+                "requires_review": extracted_value is None or extracted_value == "",  # Flag missing values
                 "field_description": field_config.get("description", "")
             }
             
@@ -569,22 +564,24 @@ class PatientAssessmentAnalyzer:
         
         return speaker_info
     
-    def _calculate_quality_indicators(self, confidence_scores: Dict[str, float]) -> Dict[str, Any]:
-        """Calculate quality indicators for the assessment."""
-        if not confidence_scores:
+    def _calculate_quality_indicators(self, extraction_status: Dict[str, float]) -> Dict[str, Any]:
+        """Calculate quality indicators for the assessment (adapted for audio processing)."""
+        if not extraction_status:
             return {"overall_quality": "insufficient_data"}
         
-        scores = list(confidence_scores.values())
-        avg_confidence = sum(scores) / len(scores)
-        min_confidence = min(scores)
-        low_confidence_count = sum(1 for score in scores if score < 0.7)
+        # For audio processing, we treat extracted values as high quality
+        # extraction_status contains 1.0 for extracted fields, 0.0 for missing
+        total_fields = len(extraction_status)
+        extracted_fields = sum(1 for status in extraction_status.values() if status > 0)
+        missing_fields = total_fields - extracted_fields
+        extraction_rate = extracted_fields / total_fields if total_fields > 0 else 0
         
         quality_indicators = {
-            "average_confidence": avg_confidence,
-            "minimum_confidence": min_confidence,
-            "fields_requiring_review": low_confidence_count,
-            "total_fields": len(scores),
-            "overall_quality": "high" if avg_confidence >= 0.8 else "medium" if avg_confidence >= 0.6 else "low"
+            "extraction_rate": extraction_rate,
+            "extracted_fields": extracted_fields,
+            "missing_fields": missing_fields,
+            "total_fields": total_fields,
+            "overall_quality": "high" if extraction_rate >= 0.8 else "medium" if extraction_rate >= 0.5 else "low"
         }
         
         return quality_indicators
@@ -592,20 +589,20 @@ class PatientAssessmentAnalyzer:
     def _generate_recommendations(
         self,
         extracted_fields: Dict[str, Any],
-        confidence_scores: Dict[str, float],
+        extraction_status: Dict[str, float],
         assessment_type: str
     ) -> List[str]:
-        """Generate recommendations based on assessment results."""
+        """Generate recommendations based on assessment results (adapted for audio processing)."""
         recommendations = []
         
-        # General quality recommendations
-        low_confidence_fields = [
-            field for field, score in confidence_scores.items() if score < 0.7
+        # Check for missing fields
+        missing_fields = [
+            field for field, status in extraction_status.items() if status == 0 or extracted_fields.get(field) is None
         ]
         
-        if low_confidence_fields:
+        if missing_fields:
             recommendations.append(
-                f"Review and verify the following fields manually: {', '.join(low_confidence_fields)}"
+                f"Review audio recording for the following missing information: {', '.join(missing_fields)}"
             )
         
         # Assessment-specific recommendations
@@ -630,7 +627,7 @@ class PatientAssessmentAnalyzer:
         
         # Data quality recommendations
         if not recommendations:
-            recommendations.append("Assessment completed successfully - all fields extracted with good confidence")
+            recommendations.append("Assessment completed successfully - all fields extracted successfully")
         
         return recommendations
     
@@ -677,15 +674,16 @@ Assessment Information:
 
 Quality Indicators:
 - Overall Quality: {quality['overall_quality'].upper()}
-- Average Confidence: {quality['average_confidence']:.2f}
-- Fields Requiring Review: {quality['fields_requiring_review']}/{quality['total_fields']}
+- Extraction Rate: {quality['extraction_rate']:.2f}
+- Fields Extracted: {quality['extracted_fields']}/{quality['total_fields']}
+- Missing Fields: {quality['missing_fields']}
 
 Assessment Responses:
 """
         
         for field_name, response in responses.items():
             status = "⚠️" if response["requires_review"] else "✅"
-            confidence = response["confidence"]
+            field_extracted = response["field_extracted"]
             value = response["extracted_value"]
             
             if isinstance(value, list):
@@ -693,10 +691,12 @@ Assessment Responses:
             else:
                 value_str = str(value) if value is not None else "Not answered"
             
+            extraction_status = "Extracted" if field_extracted > 0 else "Missing"
+            
             report += f"""
 {status} {response['question']}
    Answer: {value_str}
-   Confidence: {confidence:.2f}
+   Status: {extraction_status}
 """
         
         report += f"""
@@ -789,25 +789,15 @@ def main():
 Examples:
   # Basic usage with URL
   python healthcare_assessment_demo.py --audio-url "https://example.com/patient_conversation.wav"
-  
-  # Local file via local server
-  python healthcare_assessment_demo.py --audio-url "http://localhost:8000/audio/mental_en-US_en-ZA.wav"
-  
+
   # With patient/staff IDs and specific assessment
   python healthcare_assessment_demo.py --audio-url "https://example.com/audio.wav" --assessment-type "physical_health_assessment" --patient-id "PATIENT_123" --staff-id "NURSE_456"
-  
-  # Force create new analyzer
-  python healthcare_assessment_demo.py --audio-url "https://example.com/audio.wav" --create-new-analyzer
   
   # Overwrite existing analyzer
   python healthcare_assessment_demo.py --audio-url "https://example.com/audio.wav" --force-overwrite
   
   # Custom analyzer ID
   python healthcare_assessment_demo.py --audio-url "https://example.com/audio.wav" --analyzer-id "my-custom-analyzer"
-
-Note: For local files, start a local server first:
-  python -m http.server 8000
-  then use URLs like: http://localhost:8000/audio/your_file.wav
         """
     )
     
@@ -847,12 +837,6 @@ Note: For local files, start a local server first:
         "--list-assessments",
         action="store_true",
         help="List available assessment types and exit"
-    )
-    
-    parser.add_argument(
-        "--create-new-analyzer",
-        action="store_true",
-        help="Create a new analyzer instead of reusing existing ones"
     )
     
     parser.add_argument(
@@ -902,13 +886,6 @@ Note: For local files, start a local server first:
             print("Use --audio-url to specify the audio file URL")
             print("Examples:")
             print("  python healthcare_assessment_demo.py --audio-url 'https://example.com/conversation.wav'")
-            print("  python healthcare_assessment_demo.py --audio-url 'http://localhost:8000/audio/mental_en-US_en-ZA.wav'")
-            print("\nFor local files, start a local server first:")
-            print("  python -m http.server 8000")
-            print("  then use: --audio-url 'http://localhost:8000/audio/your_file.wav'")
-            print("\nFor demo purposes, you can use:")
-            sample_url = "https://github.com/Azure-Samples/azure-ai-content-understanding-python/raw/refs/heads/main/data/audio.wav"
-            print(f"  --audio-url '{sample_url}'")
             sys.exit(1)
         
         print(f"\n=== {args.assessment_type.replace('_', ' ').title()} Demo ===")
@@ -919,8 +896,6 @@ Note: For local files, start a local server first:
         # Display analyzer behavior
         if args.force_overwrite:
             analyzer_behavior = "Force overwrite existing analyzers"
-        elif args.create_new_analyzer:
-            analyzer_behavior = "Create new analyzer with timestamp"
         else:
             analyzer_behavior = "Reuse existing analyzers"
         print(f"Analyzer Mode: {analyzer_behavior}")
@@ -943,7 +918,6 @@ Note: For local files, start a local server first:
             care_staff_id=args.staff_id,
             session_metadata=session_metadata,
             analyzer_id=args.analyzer_id,
-            reuse_existing=not args.create_new_analyzer,
             force_overwrite=args.force_overwrite
         )
         
@@ -967,8 +941,9 @@ Note: For local files, start a local server first:
         quality = assessment_result["quality_indicators"]
         print(f"\n📊 Quality Summary:")
         print(f"   Overall Quality: {quality['overall_quality'].upper()}")
-        print(f"   Average Confidence: {quality['average_confidence']:.2f}")
-        print(f"   Fields Requiring Review: {quality['fields_requiring_review']}/{quality['total_fields']}")
+        print(f"   Extraction Rate: {quality['extraction_rate']:.2f}")
+        print(f"   Fields Extracted: {quality['extracted_fields']}/{quality['total_fields']}")
+        print(f"   Missing Fields: {quality['missing_fields']}")
         
         # Display recommendations
         recommendations = assessment_result["recommendations"]
@@ -979,7 +954,7 @@ Note: For local files, start a local server first:
         
         print(f"\n💡 Usage Tips:")
         print("1. Always review AI-generated assessments before clinical use")
-        print("2. Pay attention to confidence scores for each field")
+        print("2. Pay attention to extraction status for each field")
         print("3. Manually verify any fields marked for review")
         print("4. Ensure HIPAA compliance when handling patient data")
         

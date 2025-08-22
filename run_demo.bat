@@ -8,7 +8,7 @@ python setup.py
 
 echo.
 echo 2. Running comprehensive demo...
-python comprehensive_demo.py
+python scenarios\comprehensive_demo.py
 
 echo.
 echo Demo completed! Check the output directory for results.

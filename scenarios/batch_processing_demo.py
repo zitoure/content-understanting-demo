@@ -13,9 +13,13 @@ from typing import Dict, List, Optional, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from tqdm import tqdm
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
 
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env
-from utils import get_file_type, save_results_to_file, validate_url
+from utils.utils import get_file_type, save_results_to_file, validate_url
 
 # Set up logging
 import logging

@@ -19,9 +19,9 @@ Quick start:
 """
 
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env, PREBUILT_ANALYZERS
-from document_analysis_demo import DocumentAnalyzer
-from audio_analysis_demo import AudioAnalyzer
-from utils import (
+from scenarios.document_analysis_demo import DocumentAnalyzer
+from scenarios.audio_analysis_demo import AudioAnalyzer
+from utils.utils import (
     validate_file_size,
     get_file_type,
     validate_url,

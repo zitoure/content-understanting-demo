@@ -16,9 +16,7 @@ numpy
 python-dotenv
 pydantic
 
-# Audio processing (for golf coaching demo)
-scipy
-
+ipykernel
 
 # JSON and data serialization
 jsonschema

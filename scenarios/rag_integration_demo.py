@@ -10,9 +10,13 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
 
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env
-from utils import extract_transcript_text
+from utils.utils import extract_transcript_text
 
 # Set up logging
 import logging

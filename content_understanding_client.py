@@ -278,9 +278,27 @@ class AzureContentUnderstandingClient:
                 logger.info(f"Analysis completed successfully: {request_id}")
                 return result
             elif status.lower() in ["failed", "cancelled"]:
-                error_msg = f"Analysis failed with status: {status}"
-                logger.error(error_msg)
-                raise ContentUnderstandingError(error_msg)
+                # Get more detailed error information
+                error_details = result.get("error", {})
+                error_code = error_details.get("code", "Unknown")
+                error_message = error_details.get("message", "No error message provided")
+                
+                # Check for additional error details in the result
+                result_details = result.get("result", {})
+                warnings = result_details.get("warnings", [])
+                
+                error_info = f"Analysis failed with status: {status}"
+                if error_code != "Unknown":
+                    error_info += f", Error Code: {error_code}"
+                if error_message != "No error message provided":
+                    error_info += f", Message: {error_message}"
+                if warnings:
+                    error_info += f", Warnings: {warnings}"
+                
+                # Log the full result for debugging
+                logger.error(f"Full error result: {json.dumps(result, indent=2)}")
+                
+                raise ContentUnderstandingError(error_info)
             
             logger.info(f"Analysis in progress: {status}. Waiting {poll_interval} seconds...")
             time.sleep(poll_interval)
@@ -299,6 +317,30 @@ class AzureContentUnderstandingClient:
         
         response = self._make_request("GET", url, params=params)
         return response.json().get("value", [])
+    
+    def list_analyzer_ids(self) -> List[str]:
+        """
+        List all analyzer IDs for easy viewing.
+        
+        Returns:
+            List of analyzer IDs
+        """
+        try:
+            analyzers = self.list_analyzers()
+            analyzer_ids = []
+            
+            for analyzer in analyzers:
+                analyzer_id = analyzer.get("analyzerId")
+                if analyzer_id:
+                    analyzer_ids.append(analyzer_id)
+            
+            logger.info(f"Found {len(analyzer_ids)} analyzers")
+            
+            return analyzer_ids
+            
+        except Exception as e:
+            logger.error(f"Error listing analyzer IDs: {e}")
+            return []
     
     def delete_analyzer(self, analyzer_id: str) -> bool:
         """
@@ -320,6 +362,119 @@ class AzureContentUnderstandingClient:
         except ContentUnderstandingError as e:
             logger.error(f"Failed to delete analyzer {analyzer_id}: {e}")
             return False
+    
+    def delete_all_custom_analyzers(self) -> Dict[str, Any]:
+        """
+        Delete all custom analyzers (non-prebuilt ones).
+        
+        Returns:
+            Dictionary with deletion results
+        """
+        results = {
+            "deleted": [],
+            "failed": [],
+            "skipped": []
+        }
+        
+        try:
+            # Get all analyzers
+            analyzers = self.list_analyzers()
+            logger.info(f"Found {len(analyzers)} total analyzers")
+            
+            for analyzer in analyzers:
+                analyzer_id = analyzer.get("analyzerId", "")
+                
+                # Skip prebuilt analyzers (they typically start with "prebuilt-")
+                if analyzer_id.startswith("prebuilt-") or analyzer_id.startswith("demo-"):
+                    logger.info(f"Skipping prebuilt analyzer: {analyzer_id}")
+                    results["skipped"].append(analyzer_id)
+                    continue
+                
+                # Delete custom analyzer
+                logger.info(f"Deleting custom analyzer: {analyzer_id}")
+                if self.delete_analyzer(analyzer_id):
+                    results["deleted"].append(analyzer_id)
+                else:
+                    results["failed"].append(analyzer_id)
+            
+            logger.info(f"Deletion complete. Deleted: {len(results['deleted'])}, Failed: {len(results['failed'])}, Skipped: {len(results['skipped'])}")
+            
+        except Exception as e:
+            logger.error(f"Error during bulk deletion: {e}")
+            results["error"] = str(e)
+        
+        return results
+    
+    def validate_audio_url(self, audio_url: str, timeout: int = 60, retries: int = 3) -> Dict[str, Any]:
+        """
+        Validate that an audio URL is accessible.
+        
+        Args:
+            audio_url: URL to validate
+            timeout: Request timeout in seconds
+            retries: Number of retry attempts
+            
+        Returns:
+            Dictionary with validation results
+        """
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        # Set up retry strategy
+        retry_strategy = Retry(
+            total=retries,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        try:
+            logger.info(f"Validating URL with {timeout}s timeout and {retries} retries...")
+            response = session.head(audio_url, timeout=timeout)
+            
+            validation_result = {
+                "accessible": response.status_code == 200,
+                "status_code": response.status_code,
+                "content_type": response.headers.get("content-type", "unknown"),
+                "content_length": response.headers.get("content-length", "unknown")
+            }
+            
+            # Check if it's likely an audio file
+            content_type = validation_result["content_type"].lower()
+            is_audio = any(audio_type in content_type for audio_type in [
+                "audio", "wav", "mp3", "m4a", "ogg", "flac", "aac"
+            ])
+            validation_result["appears_to_be_audio"] = is_audio
+            
+            # Add file size info if available
+            if validation_result["content_length"] != "unknown":
+                try:
+                    size_bytes = int(validation_result["content_length"])
+                    size_mb = size_bytes / (1024 * 1024)
+                    validation_result["file_size_mb"] = round(size_mb, 2)
+                except:
+                    pass
+            
+            return validation_result
+            
+        except requests.exceptions.Timeout as e:
+            return {
+                "accessible": False,
+                "error": f"Request timed out after {timeout} seconds: {str(e)}",
+                "appears_to_be_audio": False,
+                "timeout_exceeded": True
+            }
+        except Exception as e:
+            return {
+                "accessible": False,
+                "error": str(e),
+                "appears_to_be_audio": False
+            }
 
 
 # Prebuilt analyzer constants

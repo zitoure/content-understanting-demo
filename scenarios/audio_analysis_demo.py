@@ -11,6 +11,10 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
 
 from content_understanding_client import AzureContentUnderstandingClient, create_client_from_env
 
@@ -107,6 +111,11 @@ class AudioAnalyzer:
         Returns:
             Analyzer creation result
         """
+        existing_analyzer_ids = self.client.list_analyzer_ids()
+        if analyzer_id in existing_analyzer_ids:
+            logger.warning(f"Analyzer with ID '{analyzer_id}' already exists. Reusing it")
+            return {"status": "exists", "analyzer_id": analyzer_id}
+
         # Default custom fields for audio analysis
         if custom_fields is None:
             if base_analyzer == "prebuilt-callCenter":

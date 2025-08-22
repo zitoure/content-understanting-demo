@@ -8,11 +8,15 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path to import modules
+sys.path.append(str(Path(__file__).parent.parent))
 
 from content_understanding_client import create_client_from_env
 from document_analysis_demo import DocumentAnalyzer
 from audio_analysis_demo import AudioAnalyzer
-from utils import (
+from utils.utils import (
     validate_azure_config,
     create_sample_analyzer_configs
 )
@@ -294,7 +298,13 @@ class ContentUnderstandingDemo:
             print(f"  Call center fields extracted:")
             for field_name, field_value in list(insights['extracted_fields'].items())[:3]:
                 if isinstance(field_value, list):
-                    value_str = ', '.join(field_value[:2])
+                    # Handle list of items (could be strings or dicts)
+                    if field_value and isinstance(field_value[0], dict):
+                        # Extract string values from dict items
+                        value_str = ', '.join([str(item.get('valueString', item)) for item in field_value[:2]])
+                    else:
+                        # Handle list of strings
+                        value_str = ', '.join([str(item) for item in field_value[:2]])
                 else:
                     value_str = str(field_value)[:50]
                 print(f"    {field_name}: {value_str}...")
@@ -325,7 +335,14 @@ class ContentUnderstandingDemo:
         if insights['extracted_fields']:
             print(f"  Custom meeting fields:")
             for field_name, field_value in list(insights['extracted_fields'].items())[:3]:
-                value_str = str(field_value)[:60] if not isinstance(field_value, list) else f"{len(field_value)} items"
+                if isinstance(field_value, list):
+                    # Handle list of items (could be strings or dicts)
+                    if field_value and isinstance(field_value[0], dict):
+                        value_str = f"{len(field_value)} items (structured data)"
+                    else:
+                        value_str = f"{len(field_value)} items"
+                else:
+                    value_str = str(field_value)[:60]
                 print(f"    {field_name}: {value_str}")
         
         return result

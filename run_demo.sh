@@ -8,7 +8,7 @@ python3 setup.py
 
 echo ""
 echo "2. Running comprehensive demo..."
-python3 comprehensive_demo.py
+python3 scenarios/comprehensive_demo.py
 
 echo ""
 echo "Demo completed! Check the output directory for results."
